@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BixBee | Satellite Super Resolution</title>
+  <style>
+    * { box-sizing: border-box; }
+    :root {
+      --bg: #081923; --panel: #102b37; --panel-2: #0a222d; --line: #294754;
+      --text: #eaf3f3; --muted: #a8c3c8; --accent: #70dfcc; --accent-ink: #073039;
+    }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+    }
+    header {
+      padding: 20px 5%; background: var(--panel); border-bottom: 1px solid #31505b;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .logo { font-size: 24px; font-weight: bold; color: var(--accent); }
+    .tag { color: var(--muted); font-size: 13px; }
+    main { max-width: 1400px; margin: auto; padding: 35px 5%; }
+    h1 { margin: 0 0 8px; font-size: clamp(28px, 4vw, 42px); }
+    h2 { margin: 0 0 12px; font-size: 16px; }
+    .intro { color: var(--muted); margin: 0 0 28px; max-width: 70ch; line-height: 1.5; }
+    .layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+    .panel { padding: 18px; }
+    .card-header { padding: 18px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    .card-header strong { font-size: 17px; }
+    .card-header p { color: var(--muted); font-size: 13px; margin: 5px 0 0; }
+    button, select { font: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, select:focus-visible, .upload:focus-within, .slider-stage:focus-within {
+      outline: 2px solid var(--accent); outline-offset: 2px;
+    }
+    .tabs { display: flex; gap: 5px; flex-wrap: wrap; }
+    .tabs button { padding: 8px 12px; border: 0; border-radius: 7px; color: #adc8cc; background: var(--panel-2); }
+    .tabs button.active { background: #28606a; color: white; }
+    .tabs button:disabled { opacity: .45; cursor: not-allowed; }
+
+    /* ---------- viewer ---------- */
+    .viewer { height: 520px; background: var(--panel-2); position: relative; }
+    .empty, .stage { position: absolute; inset: 0; }
+    .empty { display: flex; align-items: center; justify-content: center; text-align: center;
+             color: var(--muted); padding: 30px; line-height: 1.6; }
+    .empty strong { display: block; color: var(--text); font-size: 17px; margin-bottom: 6px; }
+    [hidden] { display: none !important; }
+    .stage img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .pixelated { image-rendering: pixelated; }
+    .label { position: absolute; top: 14px; z-index: 5; padding: 7px 10px; border-radius: 7px;
+             background: #071d27e6; font-size: 12px; font-weight: bold; pointer-events: none; }
+    .label.left { left: 14px; } .label.right { right: 14px; }
+
+    /* before / after slider */
+    .slider-stage { --pos: 50%; }
+    .slider-stage .before { position: absolute; inset: 0; clip-path: inset(0 calc(100% - var(--pos)) 0 0); }
+    .slider-stage .after { position: absolute; inset: 0; }
+    .divider { position: absolute; top: 0; bottom: 0; left: var(--pos); width: 2px; margin-left: -1px;
+               background: var(--accent); z-index: 4; pointer-events: none; }
+    .divider::after { content: "\21D4"; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+                      width: 34px; height: 34px; border-radius: 50%; background: var(--accent); color: var(--accent-ink);
+                      display: flex; align-items: center; justify-content: center; font-weight: bold; }
+    .slider-stage input[type=range] { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0;
+                                      opacity: 0; cursor: ew-resize; z-index: 6; }
+
+    /* side by side */
+    .side { display: grid; gap: 2px; background: var(--line); grid-auto-rows: minmax(0, 1fr); }
+    .side.two { grid-template-columns: 1fr 1fr; } .side.three { grid-template-columns: 1fr 1fr 1fr; }
+    .panel-img { position: relative; background: var(--panel-2); min-width: 0; min-height: 0; }
+
+    /* uncertainty */
+    .unc-stage { display: flex; flex-direction: column; }
+    .unc-stage .img-wrap { position: relative; flex: 1; min-height: 0; }
+    .unc-stage .img-wrap img { position: absolute; inset: 0; }
+    .legend { display: flex; align-items: center; gap: 10px; padding: 10px 16px; font-size: 12px; color: var(--muted);
+              background: var(--panel); border-top: 1px solid var(--line); }
+    .legend .bar { flex: 0 0 180px; height: 10px; border-radius: 5px;
+                   background: linear-gradient(90deg, #000004, #57106e, #bc3754, #f98e09, #fcffa4); }
+
+    .busy { position: absolute; inset: 0; z-index: 8; display: flex; align-items: center; justify-content: center;
+            background: #081923d9; color: var(--text); font-size: 15px; text-align: center; padding: 20px; }
+
+    /* ---------- sidebar ---------- */
+    .sidebar { display: grid; gap: 20px; align-content: start; }
+    select { width: 100%; padding: 10px; border-radius: 8px; background: var(--panel-2); color: var(--text);
+             border: 1px solid var(--line); margin-bottom: 6px; }
+    .detail { display: flex; justify-content: space-between; border-bottom: 1px solid var(--line);
+              padding: 11px 0; font-size: 13px; gap: 10px; }
+    .detail:last-child { border-bottom: 0; }
+    .detail span { color: var(--muted); } .detail strong { text-align: right; }
+    .upload { display: block; padding: 20px 12px; text-align: center; background: var(--panel-2);
+              border: 1px dashed #5a7981; border-radius: 10px; cursor: pointer; }
+    .upload small { display: block; color: var(--muted); margin-top: 7px; word-break: break-all; }
+    .upload input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+    .run { width: 100%; margin-top: 14px; padding: 12px; background: var(--accent); color: var(--accent-ink);
+           border: 0; border-radius: 9px; font-weight: bold; }
+    .run:disabled { opacity: .55; cursor: not-allowed; }
+    .note { color: var(--muted); font-size: 12px; line-height: 1.55; }
+    .error { color: #ffb4a8; }
+
+    /* ---------- results table ---------- */
+    .results { margin-top: 24px; }
+    .results h2 { padding: 18px 18px 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { padding: 12px 18px; text-align: right; border-bottom: 1px solid var(--line); }
+    th:first-child, td:first-child { text-align: left; }
+    th { color: var(--muted); font-weight: normal; font-size: 13px; }
+    tr.ours td { background: #16414a; font-weight: bold; color: var(--accent); }
+    tr:last-child td { border-bottom: 0; }
+    .results .note { padding: 12px 18px 16px; margin: 0; }
+    .foot { margin-top: 18px; max-width: 90ch; }
+
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+      .sidebar { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 600px) {
+      .sidebar { grid-template-columns: 1fr; }
+      .card-header { align-items: flex-start; flex-direction: column; }
+      .viewer { height: 380px; }
+      .side.three { grid-template-columns: 1fr; }
+      th, td { padding: 10px 8px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">BixBee</div>
+    <div class="tag">SIH 2026 &middot; SIH26142</div>
+  </header>
+
+  <main>
+    <h1>Satellite Super Resolution Mapping</h1>
+    <p class="intro">
+      Sentinel-2 imagery at 10 m goes in, a 2.5 m version comes out. Drag the divider to compare,
+      then open the Uncertainty view to see where the model is least sure.
+    </p>
+
+    <div class="layout">
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <strong id="sceneTitle">No image processed yet</strong>
+            <p id="viewerHint">Pick a sample or upload a tile, then run the enhancement.</p>
+          </div>
+          <div class="tabs">
+            <button id="tabCompare" class="active" disabled>Compare</button>
+            <button id="tabSide" disabled>Side by side</button>
+            <button id="tabUnc" disabled>Uncertainty</button>
+          </div>
+        </div>
+
+        <div class="viewer">
+          <div class="empty" id="emptyState">
+            <div><strong>Nothing to compare yet</strong>Choose a sample scene or upload a 4-band .npy tile, then select Run enhancement.</div>
+          </div>
+
+          <div class="stage slider-stage" id="stageCompare" hidden>
+            <div class="after"><img id="cmpAfter" alt="Super-resolved output" /></div>
+            <div class="before"><img id="cmpBefore" class="pixelated" alt="Original Sentinel-2 input" /></div>
+            <div class="label left">Input &middot; 10 m</div>
+            <div class="label right">SwinIR output &middot; 2.5 m</div>
+            <div class="divider"></div>
+            <input type="range" id="slider" min="0" max="100" value="50" aria-label="Before and after divider position" />
+          </div>
+
+          <div class="stage side two" id="stageSide" hidden>
+            <div class="panel-img"><div class="label left">Input &middot; 10 m</div><img id="sideIn" class="pixelated" alt="Input" /></div>
+            <div class="panel-img"><div class="label left">SwinIR output &middot; 2.5 m</div><img id="sideOut" alt="Output" /></div>
+            <div class="panel-img" id="refPanel" hidden><div class="label left">NAIP reference</div><img id="sideRef" alt="High-resolution reference" /></div>
+          </div>
+
+          <div class="stage unc-stage" id="stageUnc" hidden>
+            <div class="img-wrap"><div class="label left">Model uncertainty</div><img id="uncImg" alt="Uncertainty map" /></div>
+            <div class="legend"><span>More certain</span><span class="bar"></span><span>Less certain</span></div>
+          </div>
+
+          <div class="busy" id="busy" hidden>Running 5 Monte Carlo dropout passes. This can take a few seconds on a laptop.</div>
+        </div>
+      </section>
+
+      <div class="sidebar">
+        <section class="card panel">
+          <h2>Choose an input</h2>
+          <select id="sceneSelect" aria-label="Sample scene"><option value="">Loading samples&hellip;</option></select>
+          <label class="upload">
+            Upload your own Sentinel-2 tile
+            <small id="uploadName">4-band .npy file</small>
+            <input type="file" id="imageUpload" accept=".npy" />
+          </label>
+          <button class="run" id="runButton" disabled>Run enhancement</button>
+          <p class="note" id="uploadMessage" role="status">Runs locally on this machine. Nothing is sent to any outside server.</p>
+        </section>
+
+        <section class="card panel">
+          <h2>Scene details</h2>
+          <div class="detail"><span>Input</span><strong>Sentinel-2 L2A</strong></div>
+          <div class="detail"><span>Reference</span><strong>NAIP imagery</strong></div>
+          <div class="detail"><span>Scale factor</span><strong>4&times;</strong></div>
+          <div class="detail"><span>Bands</span><strong>RGB + NIR</strong></div>
+          <div class="detail"><span>Input size</span><strong id="dIn">&ndash;</strong></div>
+          <div class="detail"><span>Output size</span><strong id="dOut">&ndash;</strong></div>
+          <div class="detail"><span>Run time</span><strong id="dTime">&ndash;</strong></div>
+        </section>
+      </div>
+    </div>
+
+    <section class="card results">
+      <h2>Results on held-out test areas</h2>
+      <table>
+        <thead><tr><th>Method</th><th>PSNR (dB) &uarr;</th><th>SSIM &uarr;</th><th>SAM (&deg;) &darr;</th></tr></thead>
+        <tbody>
+          <tr><td>Bicubic</td><td>12.20</td><td>0.3835</td><td>7.49</td></tr>
+          <tr><td>SRCNN</td><td>16.61</td><td>0.4522</td><td>4.99</td></tr>
+          <tr class="ours"><td>SwinIR, MC-Dropout mean of 5 (ours)</td><td>17.16</td><td>0.4778</td><td>4.85</td></tr>
+        </tbody>
+      </table>
+      <p class="note">
+        Scored on regions never used in training, against NAIP aerial reference imagery. SAM is the spectral
+        angle between output and reference, so lower means the spectra are better preserved.
+      </p>
+    </section>
+
+    <p class="note foot">
+      Sentinel-2 and NAIP differ in sensor and acquisition date, which limits absolute scores for every method; the
+      comparison that matters is the gain over the baselines on identical data. Fine detail in the output is inferred
+      by the model, and the Uncertainty view marks where it is least reliable.
+    </p>
+  </main>
+
+  <script>
+    // Same-origin when served by FastAPI; falls back to the local server if this file is opened directly.
+    const API = location.protocol === "file:" ? "http://127.0.0.1:8000" : "";
+    const $ = (id) => document.getElementById(id);
+
+    const els = {
+      select: $("sceneSelect"), upload: $("imageUpload"), uploadName: $("uploadName"),
+      run: $("runButton"), msg: $("uploadMessage"), busy: $("busy"), empty: $("emptyState"),
+      title: $("sceneTitle"), hint: $("viewerHint"),
+      tabs: { compare: $("tabCompare"), side: $("tabSide"), unc: $("tabUnc") },
+      stages: { compare: $("stageCompare"), side: $("stageSide"), unc: $("stageUnc") },
+    };
+
+    let source = null;      // { type: "sample", name } or { type: "upload", file }
+    let hasResult = false;
+
+    function setMessage(text, isError = false) {
+      els.msg.textContent = text;
+      els.msg.classList.toggle("error", isError);
+    }
+
+    // ---------- samples ----------
+    async function loadSamples() {
+      try {
+        const r = await fetch(`${API}/samples`);
+        const { samples } = await r.json();
+        if (!samples.length) throw new Error("none");
+        els.select.innerHTML = samples
+          .map((s, i) => `<option value="${s.name}">Sample scene ${i + 1}</option>`).join("");
+        source = { type: "sample", name: samples[0].name };
+        els.run.disabled = false;
+      } catch {
+        els.select.innerHTML = '<option value="">No sample scenes found</option>';
+        setMessage("No samples in the samples folder. Upload a 4-band .npy tile instead.");
+      }
+    }
+    els.select.addEventListener("change", () => {
+      if (!els.select.value) return;
+      source = { type: "sample", name: els.select.value };
+      els.upload.value = "";
+      els.uploadName.textContent = "4-band .npy file";
+      els.run.disabled = false;
+    });
+    els.upload.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      source = { type: "upload", file };
+      els.uploadName.textContent = file.name;
+      els.run.disabled = false;
+      setMessage(`${file.name} selected.`);
+    });
+
+    // ---------- views ----------
+    function showView(name) {
+      Object.entries(els.stages).forEach(([k, el]) => (el.hidden = k !== name));
+      Object.entries(els.tabs).forEach(([k, el]) => el.classList.toggle("active", k === name));
+      els.empty.hidden = true;
+      els.hint.textContent = {
+        compare: "Drag the divider to compare both views",
+        side: "Input and output at the same scale",
+        unc: "Brighter areas mean the five model passes disagree more",
+      }[name];
+    }
+    Object.entries(els.tabs).forEach(([k, el]) => el.addEventListener("click", () => hasResult && showView(k)));
+
+    const slider = $("slider"), sliderStage = $("stageCompare");
+    slider.addEventListener("input", () => sliderStage.style.setProperty("--pos", slider.value + "%"));
+
+    // ---------- run ----------
+    els.run.addEventListener("click", async () => {
+      if (!source) return;
+      els.run.disabled = true;
+      els.run.textContent = "Processing\u2026";
+      els.busy.hidden = false;
+      setMessage("Running super-resolution\u2026");
+      try {
+        let res;
+        if (source.type === "sample") {
+          res = await fetch(`${API}/enhance_sample?name=${encodeURIComponent(source.name)}`, { method: "POST" });
+        } else {
+          const fd = new FormData();
+          fd.append("file", source.file);
+          res = await fetch(`${API}/enhance`, { method: "POST", body: fd });
+        }
+        if (!res.ok) {
+          let detail = `Server error (${res.status})`;
+          try { detail = (await res.json()).detail || detail; } catch {}
+          throw new Error(detail);
+        }
+        const data = await res.json();
+        showResult(data);
+        setMessage("Enhancement complete.");
+      } catch (err) {
+        setMessage(err.message.includes("Failed to fetch")
+          ? "Cannot reach the backend. Start it with: uvicorn app:app --port 8000" : err.message, true);
+      } finally {
+        els.busy.hidden = true;
+        els.run.disabled = false;
+        els.run.textContent = "Run enhancement";
+      }
+    });
+
+    function showResult(d) {
+      const inUrl = API + d.input_preview, outUrl = API + d.sr_preview, uncUrl = API + d.uncertainty_preview;
+      $("cmpBefore").src = inUrl; $("cmpAfter").src = outUrl;
+      $("sideIn").src = inUrl; $("sideOut").src = outUrl; $("uncImg").src = uncUrl;
+
+      const refPanel = $("refPanel");
+      if (d.reference_preview) { $("sideRef").src = API + d.reference_preview; refPanel.hidden = false; }
+      else { refPanel.hidden = true; }
+      $("stageSide").classList.toggle("three", !!d.reference_preview);
+      $("stageSide").classList.toggle("two", !d.reference_preview);
+
+      const [c, h, w] = d.input_shape, [, H, W] = d.output_shape;
+      $("dIn").textContent = `${w} \u00d7 ${h} px`;
+      $("dOut").textContent = `${W} \u00d7 ${H} px`;
+      $("dTime").textContent = `${d.seconds} s`;
+      els.title.textContent = "Sentinel-2 \u2192 SwinIR 4\u00d7 super resolution";
+
+      hasResult = true;
+      Object.values(els.tabs).forEach((b) => (b.disabled = false));
+      slider.value = 50; sliderStage.style.setProperty("--pos", "50%");
+      showView("compare");
+    }
+
+    loadSamples();
+  </script>
+</body>
+</html>
