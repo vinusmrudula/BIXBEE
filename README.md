@@ -48,6 +48,9 @@ PSNR/SSIM: higher is better. SAM (spectral angle): lower is better.
 
 Sentinel-2 and the NAIP reference come from different sensors and dates, which caps absolute scores for every method. The comparison that matters is the gain over the baselines on identical data.
 
+<img width="835" height="448" alt="image" src="https://github.com/user-attachments/assets/9358598b-ded2-4191-a8ec-02d6888364a6" />
+**Visual comparison:** Sentinel-2 10 m input (left), TerraLens SwinIR 4× output on a 2.5 m grid (center), and NAIP high-resolution reference (right).
+
 ## Data and training
 
 - 2,800 paired patches (700 regions x 4 patches): Sentinel-2 low-res 64x64 (10 m) and NAIP high-res 256x256 (2.5 m), 4 bands (B, G, R, NIR).
