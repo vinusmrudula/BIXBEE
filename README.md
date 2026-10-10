@@ -8,6 +8,34 @@ TerraLens uses a SwinIR transformer to turn 10 m Sentinel-2 imagery (4 bands) in
 **Demo video:** https://drive.google.com/file/d/10jJdUDgy26aPMjJGIqp5SY9H3XVK1cTq/view?usp=drive_link
 **Drive folder (video, screenshots, notebook):** https://drive.google.com/file/d/10jJdUDgy26aPMjJGIqp5SY9H3XVK1cTq/view?usp=drive_link
 
+
+Sentinel-2 (10 m, B/G/R/NIR)
+            ↓
+      Preprocessing
+            ↓
+   Bicubic 4× Upscaling
+            ↓
+        SwinIR
+   Residual Correction
+            ↓
+     MC-Dropout ×5
+        ↙       ↘
+   Mean SR     Std. Dev.
+    Image      Uncertainty
+        ↓
+PSNR / SSIM / SAM
+        ↓
+   TerraLens UI
+
+
+## Technical Documentation
+
+- [Methodology](docs/methodology.md)
+- [System Architecture](docs/architecture.md)
+- [Dataset Metadata](data_metadata/README.md)
+- [Experimental Results](results/README.md)
+- [Training Documentation](training_logs/README.md)
+
 ## Results (held-out test regions, never used in training)
 
 | Method | PSNR (dB) | SSIM | SAM (deg) |
